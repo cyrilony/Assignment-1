@@ -1,0 +1,473 @@
+clear all
+close all
+clc
+
+%% Part 1 - Electron Modeling
+
+% By applying Maxwell's principle 
+% (equipartition of energy)
+
+mo=9.10938356E-31;  % Value of m0 - mass
+Mn=0.26*mo;         % Value of mn
+T_kel = 300;        % Temperature
+kB=1.38064852e-23;  % Boltzmann constant
+V_th=sqrt(2*kB*T_kel/Mn)             % Thermal velocity calculation
+
+Mean_Free_Path = V_th*0.2E-12        % Mean Free Path (MFP) calculation
+
+% Controlling variables for simulations
+
+ht=100e-9;        % Height 
+lh=200e-9;        % Length
+Psize=3000;       % Population Size
+plot_pop=10;      % Plot population        
+Tstp=ht/V_th/100; % Time Step
+N_itr = 1000;       % Number of iterations
+
+sh_rs = 0;        % Select 0 for final result and 1 for movement show
+
+% Array for electron positions & velocities 
+% [x_position y_position x_velocity y_velocity]
+
+st = zeros(Psize, 4);
+traj=zeros(N_itr, plot_pop*2);  % Trajectories 
+temp=zeros(N_itr,1);            % Temperature
+
+for ia = 1:Psize            % Generating population with constant speed
+    ange = rand*pi*2;
+    st(ia,:) = [lh*rand ht*rand V_th*cos(ange) V_th*sin(ange)];
+end
+
+for ia = 1:N_itr         % Updating position and plot
+    st(:,1:2)=st(:,1:2)+Tstp.*st(:,3:4);
+    
+    ja=st(:,1)>lh;          % Boundaries detection for collision control
+    st(ja,1)=st(ja,1)-lh;
+    
+    ja=st(:,1)<0;
+    st(ja,1)=st(ja,1)+lh;
+    
+    ja=st(:,2)>ht;
+    st(ja,2)=ht*2-st(ja,2);
+    st(ja,4)=-st(ja,4);
+    
+    ja=st(:,2)<0;
+    st(ja,2)=-st(ja,2);
+    st(ja,4)=-st(ja,4);
+    
+    temp(ia)=(sum(st(:,3).^2)+sum(st(:,4).^2))*Mn/kB/2/Psize;
+    
+    for ja=1:plot_pop           % Save trajectories
+        traj(ia, (2*ja):(2*ja+1)) = st(ja, 1:2);
+    end 
+    
+    if sh_rs && mod(ia,5)==0  % Plot after each five iteration
+        figure(1)
+        subplot(2,1,1);
+        hold off;
+        plot(st(1:plot_pop,1)./1e-9,st(1:plot_pop,2)./1e-9,'o');
+        axis([0 lh/1e-9 0 ht/1e-9]);
+        title('Particle Trajectories');
+        ylabel('y (nm)');
+        xlabel('x (nm)');
+        
+        if ia>1         % Plot Final Result
+            subplot(2,1,2);
+            hold off;
+            plot(Tstp*(0:ia-1), temp(1:ia));
+            axis([0 Tstp*N_itr min(temp)*0.98 max(temp)*1.02]);
+            title('Semiconductor Temperature');
+            ylabel('Temperature (K)');
+            xlabel('Time (s)');
+        end
+pause(0.06);
+    end
+end
+
+figure(1);      % Plot after moving particles
+subplot(2,1,1);
+title('Particle Trajectories');
+ylabel('y (nm)');
+xlabel('x (nm)');
+axis([0 lh/1e-9 0 ht/1e-9]);
+hold on;
+
+for ia=1:plot_pop
+    plot(traj(:,ia*2)./1e-9,traj(:,ia*2+1)./1e-9,'.');
+end
+
+if(~sh_rs)
+    subplot(2,1,2);
+    hold off;
+    plot(Tstp*(0:N_itr-1),temp);
+    axis([0 Tstp*N_itr min(temp)*0.98 max(temp)*1.02]);
+    title('Semiconductor Temperature');
+    xlabel('Time (s)');
+    ylabel('Temperature (K)');
+end
+
+%% Part 2 - Collisions with MFP (Mean Free Path)
+
+% Using Maxwell-Boltzmann distribution
+
+Pscatt=1-exp(-Tstp/0.2e-12)     % Probability of scattering
+
+% Gaussian velocity (x and y) with SD (Standard Deviation)sqrt(kT/mn) 
+
+Vel_pdf=makedist('Normal','mu',0,'sigma',sqrt(kB*T_kel/Mn));
+
+% Generating initial population with help of distribution
+
+for ia = 1:Psize
+    ange=rand*2*pi;
+    st(ia,:) = [lh*rand ht*rand random(Vel_pdf) random(Vel_pdf)];
+end
+
+% Average velocity calculation
+Average_velocity=sqrt(sum(st(:,3).^2)/Psize+sum(st(:,4).^2)/Psize)
+
+% The above gives velocity (around 187km/s). That founds to be accurate.
+% The minor difference is due to random initial velocities
+
+% Second simulations
+for ia = 1:N_itr
+    
+    st(:,1:2)=st(:,1:2)+Tstp.*st(:,3:4);    % Update positions
+    
+    ja=st(:,1)>lh;
+    st(ja,1)=st(ja,1)-lh;
+    
+    ja=st(:,1)<0;
+    st(ja,1)=st(ja,1)+lh;
+    
+    ja=st(:,2)>ht;
+    st(ja,2)=2*ht-st(ja,2);
+    st(ja,4)=-st(ja,4);
+    
+    ja=st(:,2)<0;
+    st(ja,2)=-st(ja,2);
+    st(ja,4)=-st(ja,4);
+    
+    ja=rand(Psize,1)<Pscatt;       % Scattering of particles
+    st(ja,3:4)=random(Vel_pdf,[sum(ja),2]);
+    
+    % Saving temperature in variable
+    temp(ia)=(sum(st(:,3).^2)+sum(st(:,4).^2))*Mn/kB/2/Psize;
+    
+    for ja=1:plot_pop       % Position updating
+        traj(ia, (2*ja):(2*ja+1)) = st(ja, 1:2);
+    end 
+    
+    if sh_rs && mod(ia,5) == 0      % Update after each five iteration
+        figure(2);
+        subplot(3,1,1);
+        hold off
+        plot(st(1:plot_pop,1)./1e-9,st(1:plot_pop,2)./1e-9, 'o');
+        axis([0 lh/1e-9 0 ht/1e-9]);
+        title('Trajectories for Electrons');
+        ylabel('y (nm)');
+        xlabel('x (nm)');
+
+        if ia > 1
+            subplot(3,1,2);
+            hold off;
+            plot(Tstp*(0:ia-1),temp(1:ia));
+            axis([0 Tstp*N_itr min(temp)*0.98 max(temp)*1.02]);
+            title('Semiconductor Temperature');
+            ylabel('Temperature (K)');
+            xlabel('Time (s)');
+            
+        end
+        
+        subplot(3,1,3);        % Plot speed histogram
+        vl=sqrt(st(:,3).^2+st(:,4).^2);
+        title('Electron Speed Histogram');
+        histogram(vl);
+        ylabel('Number of Electrons');
+        xlabel('Speed (m/s)');
+        
+        pause(0.06);
+    end
+end
+
+figure(2);          % Final plot after movement of electrons
+subplot(3,1,1);
+title('Trajectories of Electrons');
+ylabel('y (nm)');
+xlabel('x (nm)');
+axis([0 lh/1e-9 0 ht/1e-9]);
+hold on;
+
+for ia=1:plot_pop
+    plot(traj(:,ia*2)./1e-9,traj(:,ia*2+1)./1e-9,'.');
+end
+
+if(~sh_rs)      % Plot Temperature with time
+    subplot(3,1,2);
+    hold off;
+    plot(Tstp*(0:N_itr-1),temp);
+    axis([0 Tstp*N_itr min(temp)*0.98 max(temp)*1.02]);
+    title('Semiconductor Temperature');
+    ylabel('Temperature (K)');
+    xlabel('Time (s)');   
+end
+
+subplot(3,1,3);     % Histogram for speed
+vl=sqrt(st(:,3).^2+st(:,4).^2);
+title('Electron Speed Histogram');
+histogram(vl);
+ylabel('Number of Electrons');
+xlabel('Speed (m/s)');
+
+
+%% Part 3 - Enchancements
+% The boundries can be diffusive or specular 
+% Select 1 for specular or 0 for diffusive (0)
+btm_spec=0;       % Botton specular
+tp_spec=0;        % Top specular
+
+% In this part obstacles of boxes are also included
+
+bxs = 1e-9.*[80 120 0 40; 80 120 60 100];     % Boxes dimensions
+bxs_spec = [0 1];           % Boxes specular
+
+% Generating initial population using loop
+
+for ia=1:Psize
+    ange=rand*2*pi;
+    st(ia,:)=[lh*rand ht*rand random(Vel_pdf) random(Vel_pdf)];
+    
+    while(box(st(ia,1:2),bxs))
+        st(ia,1:2)=[lh*rand ht*rand];
+    end
+end
+
+for ia=1:N_itr        % Start simulating
+    st(:,1:2)=st(:,1:2)+Tstp.*st(:,3:4);
+    
+    ja=st(:,1)>lh;
+    st(ja,1)=st(ja,1)-lh;
+    
+    ja=st(:,1)<0;
+    st(ja,1)=st(ja,1)+lh;
+    
+    ja=st(:,2)>ht;
+
+    if(tp_spec)
+        st(ja,2)=ht*2-st(ja,2);
+        st(ja,4)=-st(ja,4);
+    else             % Select Diffusive (particle bounce at random angle)
+        st(ja,2)=ht;
+        vl=sqrt(st(ja,3).^2+st(ja,4).^2);
+        ange=rand([sum(ja),1])*2*pi;
+        st(ja,3)=vl.*cos(ange);
+        st(ja,4)=-abs(vl.*sin(ange));
+    end
+    
+    ja=st(:,2)<0;
+    
+    if(btm_spec)
+        st(ja,2)=-st(ja,2);
+        st(ja,4)=-st(ja,4);
+    else % Select Diffusive (particle bounce at random angle)
+        st(ja,2)=0;
+        vl=sqrt(st(ja,3).^2+st(ja,4).^2);
+        ange=rand([sum(ja),1])*pi*2;
+        st(ja,3)=vl.*cos(ange);
+        st(ja,4)=abs(vl.*sin(ange));
+    end
+    
+    % Movement of electrons entered in box
+    for ja=1:Psize
+        bx_n=box(st(ja,1:2), bxs);
+        while(bx_n~=0)
+
+            Xdistance=0;
+            newX = 0;
+            if(st(ja,3)>0)
+                Xdistance=st(ja,1)-bxs(bx_n,1);
+                newX=bxs(bx_n,1);
+            else
+                Xdistance=bxs(bx_n,2)-st(ja,1);
+                newX=bxs(bx_n,2);
+            end
+            
+            Ydistance=0;
+            newY=0;
+            if(st(ja,4)>0)
+                Ydistance=st(ja,2)-bxs(bx_n, 3);
+                newY=bxs(bx_n, 3);
+            else
+                Ydistance=bxs(bx_n,4)-st(ja,2);
+                newY=bxs(bx_n,4);
+            end
+            
+            if(Xdistance<Ydistance)
+                st(ja,1)=newX;
+                if(~bxs_spec(bx_n))
+                    sgn=-sign(st(ja,3));
+                    vl=sqrt(st(ja,3).^2+st(ja,4).^2);
+                    ange=rand()*pi*2;
+                    st(ja,3)=sgn.*abs(vl.*cos(ange));
+                    st(ja,4)=vl.*sin(ange);
+                else    % If not select Specular
+                    st(ja,3)=-st(ja,3);
+                end
+            else
+                st(ja,2)=newY;
+                if(~bxs_spec(bx_n))
+                    sgn=-sign(st(ja,4));
+                    vl=sqrt(st(ja,3).^2+st(ja,4).^2);
+                    ange=rand()*pi*2;
+                    st(ja,3)=vl.*cos(ange);
+                    st(ja,4)=sgn.*abs(vl.*sin(ange));
+                else
+                    % If not select spec
+                    st(ja,4)=-st(ja,4);
+                end
+            end
+            
+            bx_n=box(st(ja,1:2),bxs);
+        end
+    end
+    
+    % Particles scattering
+    ja=rand(Psize,1)<Pscatt;
+    st(ja,3:4)=random(Vel_pdf,[sum(ja),2]);
+    
+    % Temperature 
+    temp(ia)=(sum(st(:,3).^2)+sum(st(:,4).^2))*Mn/kB/2/Psize;
+    
+    % Update positions of particles for plot
+    for ja=1:plot_pop
+        traj(ia,(2*ja):(2*ja+1))=st(ja, 1:2);
+    end 
+    
+    if sh_rs&&mod(ia,5)==0      % Update after each five iteration
+        figure(3)
+        subplot(3,1,1)
+        hold off;
+        plot(st(1:plot_pop,1)./1e-9,st(1:plot_pop,2)./1e-9,'o');
+        hold on;
+        
+        % Plot Box
+        for ja=1:size(bxs,1)
+        plot([bxs(ja,1) bxs(ja,1) bxs(ja,2) bxs(ja,2) bxs(ja,1)]./1e-9,...
+        [bxs(ja,3) bxs(ja,4) bxs(ja,4) bxs(ja,3) bxs(ja,3)]./1e-9, 'k-');
+        end
+        
+        axis([0 lh/1e-9 0 ht/1e-9]);
+        title('Trajectories for Electrons');
+        ylabel('y (nm)');
+        xlabel('x (nm)');
+        
+        if ia > 1
+            subplot(3,1,2);
+            hold off;
+            plot(Tstp*(0:ia-1),temp(1:ia));
+            axis([0 Tstp*N_itr min(temp(1:ia))*0.98 max(temp)*1.02]);
+            title('Semiconductor Temperature');
+            ylabel('Temperature (K)');
+            xlabel('Time (s)');            
+        end
+        
+        subplot(3, 1, 3);
+        vl=sqrt(st(:,3).^2+st(:,4).^2);
+        title('Electron Speeds Histogram');
+        histogram(vl);
+        xlabel('Speed (m/s)');
+        ylabel('Number of Electrons');
+        
+        pause(0.06);
+    end
+end
+
+figure(3);          % Plot final result
+subplot(3,1,1);
+title('Trajectories for Electrons');
+ylabel('y (nm)');
+xlabel('x (nm)');
+axis([0 lh/1e-9 0 ht/1e-9]);
+hold on;
+
+for ia=1:plot_pop
+    plot(traj(:,ia*2)./1e-9,traj(:,ia*2+1)./1e-9,'.');  
+end
+
+for ja=1:size(bxs,1)        % draw boxes
+   plot([bxs(ja,1) bxs(ja,1) bxs(ja,2) bxs(ja,2) bxs(ja,1)]./1e-9,...
+       [bxs(ja,3) bxs(ja,4) bxs(ja,4) bxs(ja,3) bxs(ja,3)]./1e-9,'k-');
+end
+
+if(~sh_rs)      % Temperature plot
+    subplot(3,1,2);
+    hold off;
+    plot(Tstp*(0:N_itr-1),temp);
+    axis([0 Tstp*N_itr min(temp)*0.98 max(temp)*1.02]);
+    title('Semiconductor Temperature');
+    ylabel('Temperature (K)');
+    xlabel('Time (s)');
+end
+
+subplot(3,1,3);
+vl = sqrt(st(:,3).^2 + st(:,4).^2);
+title('Electron Speeds Histogram');
+histogram(vl);
+ylabel('Number of particles');
+xlabel('Speed (m/s)');
+
+% Finally Electron density is given by
+denst=hist3(st(:,1:2),[200 100])';
+
+% Now, Smoothen map of electron density
+sig=3;
+Nz=20;
+[x1 y1]=meshgrid(round(-Nz/2):round(Nz/2),round(-Nz/2):round(Nz/2));
+fx = exp(-x1.^2/(2*sig^2)-y1.^2/(2*sig^2));
+fx = fx./sum(fx(:));
+figure(4);
+imagesc(conv2(denst,fx,'same'));
+set(gca,'YDir','normal');
+title('Electron Density');
+ylabel('y (nm)');
+xlabel('x (nm)');
+
+% Now temperature map is created on same pattern
+tempY=zeros(ceil(lh/1e-9),ceil(ht/1e-9));
+tempX=zeros(ceil(lh/1e-9),ceil(ht/1e-9));
+tempN=zeros(ceil(lh/1e-9),ceil(ht/1e-9));
+
+for ia=1:Psize          % Velocity of particles and finding bin
+    x1=floor(st(ia,1)/1e-9);
+    y1=floor(st(ia,2)/1e-9);
+    if(x1==0)
+        x1=1;
+    end
+    if(y1==0)
+        y1= 1;
+    end
+    
+    tempY(x1,y1)=tempY(x1, y1)+st(ia,3)^2;
+    tempX(x1,y1)=tempX(x1, y1)+st(ia,4)^2;
+    tempN(x1,y1)=tempN(x1, y1)+1;
+end
+
+% Calculations for temperature
+temp=(tempX+tempY).*Mn./kB./2./tempN;
+temp(isnan(temp))=0;
+temp=temp';
+
+% Smoothing temperature map
+sig=3;
+Nz=20;
+[x1 y1]=meshgrid(round(-Nz/2):round(Nz/2),round(-Nz/2):round(Nz/2));
+fx = exp(-x1.^2/(2*sig^2)-y1.^2/(2*sig^2));
+fx = fx./sum(fx(:));
+
+% Plot temperature map
+figure(5);
+imagesc(conv2(temp,fx,'same'));
+set(gca,'YDir','normal');
+title('Temperature Map');
+ylabel('y (nm)');
+xlabel('x (nm)');
